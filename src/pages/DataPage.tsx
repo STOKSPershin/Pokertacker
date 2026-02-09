@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { useStorage } from '@/hooks/useStorage';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings, Session } from '@/types';
-// import { read, utils } from 'xlsx'; // Удален импорт xlsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ExportSessionsModal } from '@/components/ExportSessionsModal';
 import { saveFile } from '@/lib/platform';
+import { readImportFile } from '@/lib/tauriApi';
+import * as ExcelJS from 'exceljs';
 
 const DataPage = () => {
   const { sessions, settings, updateSettings, importSessions, resetAllData } = useStorage();
@@ -85,20 +86,132 @@ const DataPage = () => {
     reader.readAsText(file);
   };
 
-  const handleSessionImportClick = () => {
-    sessionsFileInputRef.current?.click();
+  const handleSessionImportClick = async () => {
+    // В среде Tauri пытаемсь сразу открыть диалог
+    if (window.__TAURI__) {
+      await handleSessionFileChange({ target: { files: null } } as any);
+    } else {
+      // В браузере используем стандартный input
+      sessionsFileInputRef.current?.click();
+    }
   };
 
-  const handleSessionFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    // Удалена логика импорта XLSX, так как пакет xlsx был удален.
-    // Если вам нужна функциональность импорта XLSX, потребуется найти альтернативную библиотеку.
-    toast({
-      title: 'Импорт XLSX недоступен',
-      description: 'Функциональность импорта XLSX временно отключена из-за удаления библиотеки xlsx.',
-      variant: 'destructive',
-    });
-    if (sessionsFileInputRef.current) {
-      sessionsFileInputRef.current.value = '';
+  const handleSessionFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      // В среде Tauri можно использовать readImportFile для открытия диалога
+      try {
+        const fileData = await readImportFile();
+        if (fileData) {
+          await processImportedSessions(fileData);
+        }
+      } catch (error) {
+        console.error('Failed to import sessions via Tauri:', error);
+        toast({
+          title: 'Ошибка импорта',
+          description: 'Не удалось импортировать сессии через Tauri.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
+    // Обработка файла в веб-среде
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      toast({
+        title: 'Неверный тип файла',
+        description: 'Пожалуйста, выберите файл в формате .xlsx.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      await processImportedSessions(uint8Array);
+    } catch (error) {
+      console.error('Failed to process file:', error);
+      toast({
+        title: 'Ошибка обработки файла',
+        description: 'Не удалось обработать выбранный файл.',
+        variant: 'destructive',
+      });
+    } finally {
+      if (sessionsFileInputRef.current) {
+        sessionsFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const processImportedSessions = async (fileData: Uint8Array) => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      // FIX: The Uint8Array from Tauri might be backed by a SharedArrayBuffer,
+      // which is incompatible with ExcelJS. Calling .slice() on the
+      // Uint8Array creates a copy with a new, standard ArrayBuffer.
+      await workbook.xlsx.load(fileData.slice().buffer);
+      
+      const worksheet = workbook.getWorksheet(1);
+      if (!worksheet) {
+        throw new Error('Не найден лист данных в файле');
+      }
+
+      const sessions: Session[] = [];
+      let hiddenColumnIndex: number | undefined;
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell((cell, colNumber) => {
+        if (cell.value === 'Raw Data') {
+          hiddenColumnIndex = colNumber;
+        }
+      });
+
+      if (hiddenColumnIndex === undefined) {
+        throw new Error("В файле импорта не найдена колонка с заголовком 'Raw Data'.");
+      }
+      
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Пропускаем заголовок
+        
+        if (hiddenColumnIndex) {
+          const rawDataCell = row.getCell(hiddenColumnIndex);
+          const rawDataValue = rawDataCell.value;
+          
+          if (rawDataValue && typeof rawDataValue === 'string' && rawDataValue !== 'IS_OFF_DAY') {
+            try {
+              const daySessions = JSON.parse(rawDataValue);
+              if (Array.isArray(daySessions)) {
+                sessions.push(...daySessions);
+              }
+            } catch (parseError) {
+              console.warn(`Failed to parse session data for row ${rowNumber}:`, parseError);
+            }
+          }
+        }
+      });
+
+      if (sessions.length === 0) {
+        toast({
+          title: 'Нет данных для импорта',
+          description: 'В файле не найдено сессий для импорта.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      importSessions(sessions);
+      toast({
+        title: 'Импорт успешен',
+        description: `Импортировано ${sessions.length} сессий.`,
+      });
+      
+    } catch (error) {
+      console.error('Full import error object:', error);
+      toast({
+        title: 'Ошибка импорта',
+        description: `Не удалось обработать XLSX файл: ${error instanceof Error ? error.message : String(error)}`,
+        variant: 'destructive',
+      });
     }
   };
 

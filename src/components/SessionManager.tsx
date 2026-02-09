@@ -1,7 +1,8 @@
 import { useStorage } from '@/hooks/useStorage';
 import { useSession } from '@/context/SessionContext';
 import { Button } from './ui/button';
-import { Play, Square, Hand, BrainCircuit } from 'lucide-react';
+import { Play, Square, Search, Spade, Unplug } from 'lucide-react';
+import { createDetachedSessionTracker } from '@/lib/tauriApi';
 
 interface SessionManagerProps {
   // No props needed as SessionContext handles completion
@@ -15,7 +16,7 @@ const formatTime = (seconds: number) => {
 };
 
 const SessionManager = ({}: SessionManagerProps) => {
-  const { settings } = useStorage();
+  const { settings: _settings } = useStorage();
   const {
     activeSession,
     elapsedTime,
@@ -25,54 +26,103 @@ const SessionManager = ({}: SessionManagerProps) => {
     togglePeriod,
   } = useSession();
 
-  const handleStart = () => {
-    startSession();
+  const handleStart = async () => {
+    await startSession();
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
     console.log('Шаг 1: Кнопка "Остановить" нажата');
-    stopSession();
+    await stopSession();
   };
 
-  const handleTogglePeriod = (newType: 'play' | 'select') => {
-    togglePeriod(newType);
+  const handleTogglePeriod = async (newType: 'play' | 'select') => {
+    await togglePeriod(newType);
+  };
+
+  const handleDetach = async () => {
+    try {
+      await createDetachedSessionTracker();
+    } catch (error) {
+      console.error('Failed to create detached window:', error);
+    }
   };
 
   return (
-    <div className="p-6 rounded-lg border bg-card text-card-foreground shadow-sm w-full max-w-md mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-center">Трекер сессий</h2>
-      <div className="text-6xl font-mono text-center mb-6 tabular-nums">
-        {formatTime(elapsedTime)}
-      </div>
-      <div className="flex flex-col gap-4">
-        {!activeSession ? (
-          <Button onClick={handleStart} size="lg" className="w-full">
-            <Play className="mr-2 h-5 w-5" /> Начать сессию
-          </Button>
-        ) : (
-          <>
-            {settings.splitPeriods && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  onClick={() => handleTogglePeriod('select')}
-                  variant={currentPeriodType === 'select' ? 'secondary' : 'outline'}
-                >
-                  <BrainCircuit className="mr-2 h-4 w-4" /> Селект
-                </Button>
-                <Button
-                  onClick={() => handleTogglePeriod('play')}
-                  variant={currentPeriodType === 'play' ? 'secondary' : 'outline'}
-                >
-                  <Hand className="mr-2 h-4 w-4" /> Игра
-                </Button>
-              </div>
-            )}
-            <Button onClick={handleStop} variant="destructive" size="lg" className="w-full">
-              <Square className="mr-2 h-5 w-5" /> Остановить сессию
+    <div className="flex items-center gap-3">
+      <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm container-common">
+        {/* Horizontal container with buttons and timer */}
+        <div className="flex items-center justify-center gap-6">
+          {/* Three square buttons container */}
+          <div className="flex gap-3">
+            {/* Select mode button (magnifying glass) */}
+            <Button
+              onClick={() => activeSession && handleTogglePeriod('select')}
+              disabled={!activeSession}
+              size="lg"
+              variant="outline"
+              className={`
+                aspect-square h-14 w-14 p-0
+                ${activeSession && currentPeriodType === 'select' 
+                  ? 'border-red-300 border' 
+                  : activeSession 
+                    ? 'opacity-50' 
+                    : 'opacity-50'
+                }
+              `}
+            >
+              <Search className="h-5 w-5" />
             </Button>
-          </>
-        )}
+
+            {/* Play mode button (playing cards) */}
+            <Button
+              onClick={() => activeSession && handleTogglePeriod('play')}
+              disabled={!activeSession}
+              size="lg"
+              variant="outline"
+              className={`
+                aspect-square h-14 w-14 p-0
+                ${activeSession && currentPeriodType === 'play' 
+                  ? 'border-red-300 border' 
+                  : activeSession 
+                    ? 'opacity-50' 
+                    : 'opacity-50'
+                }
+              `}
+            >
+              <Spade className="h-5 w-5" />
+            </Button>
+
+            {/* Start/Stop session button */}
+            <Button
+              onClick={activeSession ? handleStop : handleStart}
+              size="lg"
+              variant={activeSession ? "destructive" : "default"}
+              className="aspect-square h-14 w-14 p-0"
+            >
+              {activeSession ? (
+                <Square className="h-5 w-5" />
+              ) : (
+                <Play className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+
+          {/* Timer */}
+          <div className="text-4xl font-mono tabular-nums text-primary font-bold">
+            {formatTime(elapsedTime)}
+          </div>
+        </div>
       </div>
+      
+      {/* Detach button - positioned to the right of the main container */}
+      <Button
+        onClick={handleDetach}
+        size="sm"
+        variant="outline"
+        className="aspect-square h-7 w-7 p-0 flex-shrink-0 duplicate-button"
+      >
+        <Unplug className="h-3 w-3" />
+      </Button>
     </div>
   );
 };

@@ -6,33 +6,31 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "pokertraker",
+    "productName": "PokerTraker",
     "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
       "all": false,
       "dialog": {
-        "all": true,
-        "save": true
+        "all": true
       },
       "fs": {
-        "all": true,
-        "writeFile": true,
-        "writeBinaryFile": true
+        "all": true
+      },
+      "window": {
+        "all": true
       }
     },
     "bundle": {
+"icon": [
+        "icons/icon.ico",
+        "icons/32x32.png",
+        "icons/128x128.png"
+      ],
       "active": true,
       "targets": "all",
-      "identifier": "com.pokertraker.dev",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ]
+      "identifier": "com.pokertraker.dev"
     },
     "security": {
       "csp": null
@@ -43,7 +41,11 @@
         "resizable": true,
         "title": "PokerTraker",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
     ]
   }

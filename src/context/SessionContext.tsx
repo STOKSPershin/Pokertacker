@@ -1,5 +1,6 @@
-import { useState, useRef, useContext, ReactNode, createContext } from 'react';
+import { useState, useRef, useContext, ReactNode, createContext, useEffect, useCallback } from 'react';
 import { useStorage } from '@/hooks/useStorage';
+import { getCurrentTime } from '@/lib/tauriApi';
 import type { Session, SessionPeriod } from '@/types';
 
 type ActiveSession = Omit<Session, 'id' | 'overallEndTime' | 'overallDuration' | 'overallProfit' | 'overallHandsPlayed' | 'notes' | 'handsPlayed'>;
@@ -15,9 +16,9 @@ interface SessionContextType {
   activeSession: ActiveSession | null;
   elapsedTime: number;
   currentPeriodType: 'play' | 'break' | 'select';
-  startSession: () => void;
-  stopSession: () => void;
-  togglePeriod: (newType: 'play' | 'break' | 'select') => void;
+  startSession: () => Promise<void>;
+  stopSession: () => Promise<void>;
+  togglePeriod: (newType: 'play' | 'break' | 'select') => Promise<void>;
   completedSession: Omit<Session, 'id' | 'notes' | 'handsPlayed'> | null;
   clearCompletedSession: () => void;
 }
@@ -37,21 +38,14 @@ export const SessionProvider = ({ children }: SessionProviderProps) => {
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const stopTimer = () => {
+  const stopTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+  }, []);
 
-  const startTimer = () => {
-    stopTimer();
-    intervalRef.current = setInterval(() => {
-      setElapsedTime((prev) => prev + 1);
-    }, 1000);
-  };
-
-  useState(() => {
+  useEffect(() => {
     const storedSessionString = localStorage.getItem('activeSession');
     if (storedSessionString) {
       try {
@@ -76,7 +70,6 @@ export const SessionProvider = ({ children }: SessionProviderProps) => {
           setCurrentPeriodType('play');
         }
 
-        startTimer();
         console.log('Active session restored from localStorage.');
       } catch (error) {
         console.error('Failed to parse active session from localStorage:', error);
@@ -84,99 +77,262 @@ export const SessionProvider = ({ children }: SessionProviderProps) => {
       }
     }
 
+    const storedCompletedSessionString = localStorage.getItem('completedSession');
+    if (storedCompletedSessionString) {
+      try {
+        const storedCompletedSession = JSON.parse(storedCompletedSessionString);
+        setCompletedSession(storedCompletedSession);
+        console.log('Completed session restored from localStorage.');
+      } catch (error) {
+        console.error('Failed to parse completed session from localStorage:', error);
+        localStorage.removeItem('completedSession');
+      }
+    }
+
     return () => stopTimer();
-  });
+  }, []);
 
-  const startSession = () => {
-    const now = new Date().toISOString();
-    const initialPeriods: SessionPeriod[] = [{ type: 'play', startTime: now, endTime: '' }];
-
-    setActiveSession({
-      overallStartTime: now,
-      periods: initialPeriods,
-    });
-    setCurrentPeriodType('play');
-    setElapsedTime(0);
-    setCompletedSession(null);
-    startTimer();
-
-    const tempId = crypto.randomUUID();
-    const sessionToStore: StoredActiveSession = {
-      id: tempId,
-      overallStartTime: now,
-      periods: initialPeriods,
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'activeSession') {
+        console.log('Storage event detected for activeSession.');
+        const newSessionString = event.newValue;
+        if (newSessionString) {
+          try {
+            const newSession: StoredActiveSession = JSON.parse(newSessionString);
+            setActiveSession({
+              overallStartTime: newSession.overallStartTime,
+              periods: newSession.periods || [],
+            });
+            const lastPeriod = newSession.periods && newSession.periods.length > 0
+              ? newSession.periods[newSession.periods.length - 1]
+              : null;
+            if (lastPeriod) {
+              setCurrentPeriodType(lastPeriod.type);
+            } else {
+              setCurrentPeriodType('play');
+            }
+          } catch (error) {
+            console.error('Failed to parse active session from storage event:', error);
+          }
+        } else {
+          // Session was removed
+          setActiveSession(null);
+        }
+      } else if (event.key === 'completedSession') {
+        console.log('Storage event detected for completedSession.');
+        const newCompletedSessionString = event.newValue;
+        if (newCompletedSessionString) {
+          try {
+            const newCompletedSession = JSON.parse(newCompletedSessionString);
+            setCompletedSession(newCompletedSession);
+          } catch (error) {
+            console.error('Failed to parse completed session from storage event:', error);
+          }
+        } else {
+          setCompletedSession(null);
+        }
+      }
     };
-    localStorage.setItem('activeSession', JSON.stringify(sessionToStore));
-    console.log('Active session started and saved to localStorage.');
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeSession) {
+      stopTimer();
+      intervalRef.current = setInterval(() => {
+        const sessionStartTime = new Date(activeSession.overallStartTime).getTime();
+        const currentTimestamp = Date.now();
+        const calculatedElapsedTime = Math.floor((currentTimestamp - sessionStartTime) / 1000);
+        setElapsedTime(calculatedElapsedTime);
+      }, 1000);
+    }
+    return () => stopTimer();
+  }, [activeSession, stopTimer]);
+
+  const startSession = async () => {
+    try {
+      const now = await getCurrentTime();
+      const initialPeriods: SessionPeriod[] = [{ type: 'play', startTime: now, endTime: '' }];
+
+      setActiveSession({
+        overallStartTime: now,
+        periods: initialPeriods,
+      });
+      setCurrentPeriodType('play');
+      setElapsedTime(0);
+      setCompletedSession(null);
+
+      const tempId = crypto.randomUUID();
+      const sessionToStore: StoredActiveSession = {
+        id: tempId,
+        overallStartTime: now,
+        periods: initialPeriods,
+      };
+      localStorage.setItem('activeSession', JSON.stringify(sessionToStore));
+      console.log('Active session started and saved to localStorage.');
+    } catch (error) {
+      console.warn('Failed to get system time, using browser time:', error);
+      // Fallback to browser time
+      const now = new Date().toISOString();
+      const initialPeriods: SessionPeriod[] = [{ type: 'play', startTime: now, endTime: '' }];
+
+      setActiveSession({
+        overallStartTime: now,
+        periods: initialPeriods,
+      });
+      setCurrentPeriodType('play');
+      setElapsedTime(0);
+      setCompletedSession(null);
+
+      const tempId = crypto.randomUUID();
+      const sessionToStore: StoredActiveSession = {
+        id: tempId,
+        overallStartTime: now,
+        periods: initialPeriods,
+      };
+      localStorage.setItem('activeSession', JSON.stringify(sessionToStore));
+      console.log('Active session started and saved to localStorage.');
+    }
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
     console.log('Шаг 2: Функция stopSession в контексте вызвана');
-    stopTimer();
     if (!activeSession) return;
 
-    const now = new Date().toISOString();
-    const finalizedPeriods = activeSession.periods
-      ? activeSession.periods.map((p, index) =>
-          index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
-        )
-      : [];
+    try {
+      const now = await getCurrentTime();
+      const finalizedPeriods = activeSession.periods
+        ? activeSession.periods.map((p, index) =>
+            index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
+          )
+        : [];
 
-    const overallStartTimeDate = new Date(activeSession.overallStartTime);
-    const overallEndTimeDate = new Date(now);
-    const overallDuration = Math.floor((overallEndTimeDate.getTime() - overallStartTimeDate.getTime()) / 1000);
+      const overallStartTimeDate = new Date(activeSession.overallStartTime);
+      const overallEndTimeDate = new Date(now);
+      const overallDuration = Math.floor((overallEndTimeDate.getTime() - overallStartTimeDate.getTime()) / 1000);
 
-    const sessionData: Omit<Session, 'id' | 'notes' | 'handsPlayed'> = {
-      ...activeSession,
-      overallEndTime: now,
-      overallDuration: overallDuration,
-      overallProfit: 0,
-      overallHandsPlayed: 0,
-      periods: finalizedPeriods,
-    };
+      const sessionData: Omit<Session, 'id' | 'notes' | 'handsPlayed'> = {
+        ...activeSession,
+        overallEndTime: now,
+        overallDuration: overallDuration,
+        overallProfit: 0,
+        overallHandsPlayed: 0,
+        periods: finalizedPeriods,
+      };
 
-    setCompletedSession(sessionData);
-    setActiveSession(null);
+      setCompletedSession(sessionData);
+      localStorage.setItem('completedSession', JSON.stringify(sessionData));
+      setActiveSession(null);
 
-    localStorage.removeItem('activeSession');
-    console.log('Active session stopped and removed from localStorage.');
+      localStorage.removeItem('activeSession');
+      console.log('Active session stopped and removed from localStorage.');
+    } catch (error) {
+      console.warn('Failed to get system time, using browser time:', error);
+      // Fallback to browser time
+      const now = new Date().toISOString();
+      const finalizedPeriods = activeSession.periods
+        ? activeSession.periods.map((p, index) =>
+            index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
+          )
+        : [];
+
+      const overallStartTimeDate = new Date(activeSession.overallStartTime);
+      const overallEndTimeDate = new Date(now);
+      const overallDuration = Math.floor((overallEndTimeDate.getTime() - overallStartTimeDate.getTime()) / 1000);
+
+      const sessionData: Omit<Session, 'id' | 'notes' | 'handsPlayed'> = {
+        ...activeSession,
+        overallEndTime: now,
+        overallDuration: overallDuration,
+        overallProfit: 0,
+        overallHandsPlayed: 0,
+        periods: finalizedPeriods,
+      };
+
+      setCompletedSession(sessionData);
+      localStorage.setItem('completedSession', JSON.stringify(sessionData));
+      setActiveSession(null);
+
+      localStorage.removeItem('activeSession');
+      console.log('Active session stopped and removed from localStorage.');
+    }
   };
 
-  const togglePeriod = (newType: 'play' | 'break' | 'select') => {
+  const togglePeriod = async (newType: 'play' | 'break' | 'select') => {
     if (!activeSession || currentPeriodType === newType) return;
 
-    const now = new Date().toISOString();
-    const updatedPeriods = activeSession.periods
-      ? activeSession.periods.map((p, index) =>
-          index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
-        )
-      : [];
+    try {
+      const now = await getCurrentTime();
+      const updatedPeriods = activeSession.periods
+        ? activeSession.periods.map((p, index) =>
+            index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
+          )
+        : [];
 
-    const newPeriod: SessionPeriod = { type: newType, startTime: now, endTime: '' };
+      const newPeriod: SessionPeriod = { type: newType, startTime: now, endTime: '' };
 
-    const newActiveSession = {
-      ...activeSession,
-      periods: [...updatedPeriods, newPeriod],
-    };
-    setActiveSession(newActiveSession);
-    setCurrentPeriodType(newType);
+      const newActiveSession = {
+        ...activeSession,
+        periods: [...updatedPeriods, newPeriod],
+      };
+      setActiveSession(newActiveSession);
+      setCurrentPeriodType(newType);
 
-    const storedSessionString = localStorage.getItem('activeSession');
-    if (storedSessionString) {
-      try {
-        const storedSession: StoredActiveSession = JSON.parse(storedSessionString);
-        localStorage.setItem('activeSession', JSON.stringify({
-          ...storedSession,
-          periods: newActiveSession.periods || [],
-        }));
-      } catch (error) {
-        console.error('Failed to update active session periods in localStorage:', error);
+      const storedSessionString = localStorage.getItem('activeSession');
+      if (storedSessionString) {
+        try {
+          const storedSession: StoredActiveSession = JSON.parse(storedSessionString);
+          localStorage.setItem('activeSession', JSON.stringify({
+            ...storedSession,
+            periods: newActiveSession.periods || [],
+          }));
+        } catch (error) {
+          console.error('Failed to update active session periods in localStorage:', error);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to get system time, using browser time:', error);
+      // Fallback to browser time
+      const now = new Date().toISOString();
+      const updatedPeriods = activeSession.periods
+        ? activeSession.periods.map((p, index) =>
+            index === (activeSession.periods?.length ?? 0) - 1 ? { ...p, endTime: now } : p
+          )
+        : [];
+
+      const newPeriod: SessionPeriod = { type: newType, startTime: now, endTime: '' };
+
+      const newActiveSession = {
+        ...activeSession,
+        periods: [...updatedPeriods, newPeriod],
+      };
+      setActiveSession(newActiveSession);
+      setCurrentPeriodType(newType);
+
+      const storedSessionString = localStorage.getItem('activeSession');
+      if (storedSessionString) {
+        try {
+          const storedSession: StoredActiveSession = JSON.parse(storedSessionString);
+          localStorage.setItem('activeSession', JSON.stringify({
+            ...storedSession,
+            periods: newActiveSession.periods || [],
+          }));
+        } catch (error) {
+          console.error('Failed to update active session periods in localStorage:', error);
+        }
       }
     }
   };
 
   const clearCompletedSession = () => {
     setCompletedSession(null);
+    localStorage.removeItem('completedSession');
   };
 
   const contextValue = {

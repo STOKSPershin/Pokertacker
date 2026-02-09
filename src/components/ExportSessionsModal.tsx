@@ -1,37 +1,37 @@
 import { useState } from 'react';
-    import ExcelJS from 'exceljs';
-    import { Settings } from 'lucide-react';
-    import {
-      Dialog,
-      DialogContent,
-      DialogHeader,
-      DialogTitle,
-      DialogFooter,
-      DialogDescription,
-    } from '@/components/ui/dialog';
-    import { Button } from '@/components/ui/button';
-    import { Checkbox } from '@/components/ui/checkbox';
-    import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-    import { Calendar } from '@/components/ui/calendar';
-    import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-    import { Label } from '@/components/ui/label';
-    import { Switch } from '@/components/ui/switch';
-    import type { DateRange } from 'react-day-picker';
-    import {
-      subDays,
-      format,
-      startOfDay,
-      eachDayOfInterval,
-      endOfDay as getEndOfDay,
-      startOfWeek,
-      endOfWeek,
-      startOfMonth,
-      endOfMonth
-    } from 'date-fns';
-    import { ru } from 'date-fns/locale';
-    import { useStorage } from '@/hooks/useStorage';
-    import type { Session, SessionPeriod } from '@/types';
-    import { saveFile } from '@/lib/platform';
+import ExcelJS from 'exceljs';
+import { Settings } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import type { DateRange } from 'react-day-picker';
+import {
+  subDays,
+  format,
+  startOfDay,
+  eachDayOfInterval,
+  endOfDay as getEndOfDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth
+} from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { useStorage } from '@/hooks/useStorage';
+import type { Session, SessionPeriod } from '@/types';
+import { saveFile } from '@/lib/platform';
 
     // Define visible columns for the UI and general export structure
     const columns = [

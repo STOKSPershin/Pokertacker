@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Line, LineChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from 'recharts';
+import { Line, LineChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, Bar, BarChart } from 'recharts';
 import { differenceInMilliseconds, format, subDays, isAfter } from 'date-fns';
 
 import { useStorage } from '@/hooks/useStorage';
+import { useTheorySessions } from '@/hooks/useTheorySessions';
 import {
   ChartContainer,
   ChartTooltip,
@@ -14,11 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import type { ChartConfig } from '@/components/ui/chart';
 
 const AnalyticsDashboard = () => {
-  const { sessions } = useStorage();
+  const { sessions, settings } = useStorage();
+  const { sessions: theorySessions } = useTheorySessions();
 
-  const { dailyData, timeRatioData } = useMemo(() => {
+  const { dailyData, timeRatioData, theoryData } = useMemo(() => {
     if (!sessions || sessions.length === 0) {
-      return { dailyData: [], timeRatioData: [] };
+      return { dailyData: [], timeRatioData: [], theoryData: [] };
     }
 
     const thirtyDaysAgo = subDays(new Date(), 30);
@@ -75,8 +77,26 @@ const AnalyticsDashboard = () => {
       { name: 'Селект', value: selectHours, fill: 'hsl(var(--muted))' },
     ].filter((d) => d.value > 0);
 
-    return { dailyData: sortedDailyData, timeRatioData: timeRatio };
-  }, [sessions]);
+    // Process data for theory vs plan (bar chart)
+    const theoryData = Object.entries(dailyHours).map(([date, _gameHours]) => {
+      const theoryHours = theorySessions
+        .filter(session => {
+          const sessionDate = format(new Date(session.endTime), 'yyyy-MM-dd');
+          return sessionDate === date;
+        })
+        .reduce((total, session) => total + session.duration, 0) / (1000 * 60 * 60);
+
+      const planHours = 0.5; // 30 минут по умолчанию
+
+      return {
+        date: format(new Date(date), 'MMM d'),
+        theory: parseFloat(theoryHours.toFixed(2)),
+        plan: planHours,
+      };
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    return { dailyData: sortedDailyData, timeRatioData: timeRatio, theoryData };
+  }, [sessions, theorySessions]);
 
   const dailyChartConfig: ChartConfig = {
     hours: {
@@ -91,6 +111,17 @@ const AnalyticsDashboard = () => {
     },
     'Селект': {
       label: 'Селект',
+    },
+  };
+
+  const theoryChartConfig: ChartConfig = {
+    theory: {
+      label: 'Теория',
+      color: 'hsl(var(--accent))',
+    },
+    plan: {
+      label: 'План',
+      color: 'hsl(var(--muted))',
     },
   };
 
@@ -173,6 +204,51 @@ const AnalyticsDashboard = () => {
           </ChartContainer>
         </CardContent>
       </Card>
+
+      {settings.showTheoryColumns && (
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Теория vs. План</CardTitle>
+            <CardDescription>Сравнение времени, потраченного на теорию, с планом за последние 30 дней.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={theoryChartConfig} className="h-[250px] w-full">
+              <BarChart
+                data={theoryData}
+                margin={{ top: 20, left: 10, right: 10 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  tickMargin={10}
+                  axisLine={false}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={10}
+                  tickFormatter={(value) => `${value}ч`}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent />}
+                />
+                <Bar
+                  dataKey="theory"
+                  fill="var(--color-theory)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="plan"
+                  fill="var(--color-plan)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

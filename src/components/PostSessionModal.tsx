@@ -14,35 +14,46 @@ import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
+import { Checkbox } from './ui/checkbox';
 
 interface PostSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   session: Omit<Session, 'id' | 'notes' | 'handsPlayed'> | null;
+  totalHandsToday: number;
 }
 
-const PostSessionModal = ({ isOpen, onClose, session }: PostSessionModalProps) => {
+const PostSessionModal = ({ isOpen, onClose, session, totalHandsToday }: PostSessionModalProps) => {
   const { settings, addSession } = useStorage();
   const [notes, setNotes] = useState('');
   const [handsPlayed, setHandsPlayed] = useState('');
+  const [subtractTodayHands, setSubtractTodayHands] = useState(false);
 
   useEffect(() => {
     // Reset form fields when the modal becomes visible
     if (isOpen) {
       setNotes('');
       setHandsPlayed('');
+      setSubtractTodayHands(false);
     }
   }, [isOpen]);
 
   const handleSave = () => {
     if (!session) return;
 
-    const handsPlayedNumber = parseInt(handsPlayed, 10);
+    let handsPlayedNumber = parseInt(handsPlayed, 10);
+    if (isNaN(handsPlayedNumber)) {
+      handsPlayedNumber = 0;
+    }
+
+    if (subtractTodayHands) {
+      handsPlayedNumber -= totalHandsToday;
+    }
 
     const finalSession: Omit<Session, 'id'> = {
       ...session,
       notes: notes,
-      handsPlayed: isNaN(handsPlayedNumber) ? 0 : handsPlayedNumber,
+      handsPlayed: handsPlayedNumber,
     };
 
     addSession(finalSession);
@@ -140,6 +151,24 @@ const PostSessionModal = ({ isOpen, onClose, session }: PostSessionModalProps) =
                 className="col-span-3"
                 placeholder="например, 150"
               />
+            </div>
+          )}
+          {settings.showHandsPlayed && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <div />
+              <div className="col-span-3 flex items-center space-x-2">
+                <Checkbox
+                  id="subtract-hands"
+                  checked={subtractTodayHands}
+                  onCheckedChange={(checked) => setSubtractTodayHands(checked as boolean)}
+                />
+                <label
+                  htmlFor="subtract-hands"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Отнять руки, сыгранные сегодня ({totalHandsToday})
+                </label>
+              </div>
             </div>
           )}
         </div>

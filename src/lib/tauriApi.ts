@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api';
 import { save, open } from '@tauri-apps/api/dialog';
 import { writeBinaryFile, readBinaryFile } from '@tauri-apps/api/fs';
+import { WebviewWindow } from '@tauri-apps/api/window';
 
 /**
  * Gets the current system timestamp from the Rust backend.
@@ -69,7 +70,9 @@ export const readImportFile = async (): Promise<Uint8Array | null> => {
         });
 
         if (typeof selected === 'string') {
-            return await readBinaryFile(selected);
+            const data = await readBinaryFile(selected);
+            // Ensure we return a Uint8Array with a standard ArrayBuffer
+            return new Uint8Array(data);
         }
         return null;
     } catch(error) {
@@ -100,4 +103,94 @@ export const readImportFile = async (): Promise<Uint8Array | null> => {
             input.click();
         });
     }
+};
+
+// Track the detached window instance
+let detachedWindow: WebviewWindow | null = null;
+
+/**
+ * Creates a detached session tracker window without decorations.
+ * If a window already exists, closes it instead.
+ */
+export const createDetachedSessionTracker = async (_detachedWindowSize: 'small' | 'large' = 'large'): Promise<void> => {
+  // Set window size to match container dimensions
+  const width = 211;
+  const height = 70;
+
+  try {
+    // If window already exists, close it
+    if (detachedWindow) {
+      try {
+        await detachedWindow.close();
+        detachedWindow = null;
+        console.log('Detached session tracker window closed');
+        return;
+      } catch (error) {
+        console.error('Error closing detached window:', error);
+        detachedWindow = null;
+      }
+    }
+
+    // Create new window
+    detachedWindow = new WebviewWindow('session-tracker-detached', {
+      url: '/session-tracker-detached',
+      title: 'Session Tracker',
+      width: width,
+      height: height,
+      minWidth: 211,
+      minHeight: 70,
+      maxWidth: 211,
+      maxHeight: 70,
+      decorations: false,
+      resizable: true,
+      alwaysOnTop: true,
+      skipTaskbar: false,
+      center: true,
+      transparent: true,
+      focus: true,
+      // Additional window properties for better resize control
+      titleBarStyle: 'overlay',
+      hiddenTitle: true
+    });
+
+    await detachedWindow.once('tauri://created', () => {
+      console.log('Detached session tracker window created');
+    });
+
+    await detachedWindow.once('tauri://error', (e) => {
+      console.error('Failed to create detached window:', e);
+      detachedWindow = null;
+    });
+
+    // Listen for window close event to reset the reference
+    await detachedWindow.once('tauri://close-requested', () => {
+      detachedWindow = null;
+      console.log('Detached window closed by user');
+    });
+  } catch (error) {
+    console.error('Failed to create detached session tracker window:', error);
+    detachedWindow = null;
+    // Fallback: open in new browser window/tab
+    window.open('/session-tracker-detached', '_blank', `width=${width},height=${height},toolbar=no,menubar=no,scrollbars=no`);
+  }
+};
+
+
+/**
+ * Focuses the main application window, bringing it to the foreground.
+ */
+export const focusMainWindow = async (): Promise<void> => {
+  try {
+    const mainWindow = WebviewWindow.getByLabel('main');
+    if (mainWindow) {
+      await mainWindow.unminimize();
+      await mainWindow.setFocus();
+      console.log('Main window focused and brought to front.');
+    } else {
+      console.warn('Main window with label "main" not found.');
+    }
+  } catch (error) {
+    console.error('Failed to focus main window:', error);
+    // This might fail in a pure web environment, which is expected.
+  }
 };

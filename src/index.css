@@ -3,6 +3,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS переменные для управления позиционированием контейнеров */
+:root {
+  /* Вертикальные отступы между контейнерами */
+  --container-spacing: 1rem; /* 16px - можно изменить на любое значение */
+  
+  /* Горизонтальные отступы для кнопок дублирования */
+  --duplicate-button-spacing: 0.75rem; /* 12px */
+  
+  /* Ширина всех контейнеров */
+  --container-width: 400px;
+  
+  /* Дополнительные отступы для отдельных контейнеров */
+  --session-tracker-top-margin: 0;
+  --session-manager-top-margin: 0px; /* увеличенный вертикальный отступ для SessionManager */
+  --theory-tracker-top-margin: 25px; /* увеличенный вертикальный отступ для TheoryTracker */
+  --theory-session-manager-top-margin: 0;
+  
+  /* Горизонтальные смещения для отдельных контейнеров */
+  --theory-tracker-left-margin: 0px; /* смещение TheoryTracker вправо на 20px */
+  --session-tracker-left-margin: 0px;
+  --session-manager-left-margin: 50px; /* смещение SessionManager вправо на 10px */
+  --theory-session-manager-left-margin: 50px; /* смещение TheorySessionManager вправо на 50px */
+}
+
+/* Применение переменных к контейнерам */
+.session-tracker {
+  margin-top: var(--session-tracker-top-margin);
+  margin-left: var(--session-tracker-left-margin);
+}
+
+.session-manager {
+  margin-top: var(--session-manager-top-margin);
+  margin-left: var(--session-manager-left-margin);
+}
+
+.theory-tracker {
+  margin-top: var(--theory-tracker-top-margin);
+  margin-left: var(--theory-tracker-left-margin);
+}
+
+.theory-session-manager {
+  margin-top: var(--theory-session-manager-top-margin);
+  margin-left: var(--theory-session-manager-left-margin);
+}
+
+/* Общие стили для всех контейнеров */
+.container-common {
+  width: var(--container-width);
+  margin: 0 auto;
+}
+
+/* Стили для кнопок дублирования */
+.duplicate-button {
+  margin-left: var(--duplicate-button-spacing);
+}
+
 @layer base {
   :root {
     --background: 222.2 84% 4.9%;
@@ -34,6 +90,11 @@
     --ring: 212.7 26.8% 83.9%;
 
     --radius: 0.5rem;
+
+    /* Цвета для графиков */
+    --color-hours: hsl(var(--primary));
+    --color-theory: hsl(var(--accent));
+    --color-plan: hsl(var(--muted));
   }
 
   .dark {
@@ -73,5 +134,20 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* Prevent large border frames when dragging windows */
+  html, body {
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+  }
+  
+  #root {
+    border: none;
+    outline: none;
+    box-shadow: none;
   }
 }

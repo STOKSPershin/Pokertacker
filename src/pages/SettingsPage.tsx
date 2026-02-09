@@ -340,6 +340,51 @@ const SettingsPage = () => {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Дашборд</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="show-theory-columns">Показывать столбцы теории</Label>
+                <Switch
+                  id="show-theory-columns"
+                  checked={settings.showTheoryColumns}
+                  onCheckedChange={(checked) => updateSettings({ showTheoryColumns: checked })}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Трекер сессий</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-medium mb-3">Размер дублированного окна</h3>
+                <RadioGroup
+                  value={settings.detachedWindowSize}
+                  onValueChange={(value) => updateSettings({ detachedWindowSize: value as 'small' | 'large' })}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="small" id="window-size-small" />
+                    <Label htmlFor="window-size-small">Малый (210×130)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="large" id="window-size-large" />
+                    <Label htmlFor="window-size-large">Большой (420×260)</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

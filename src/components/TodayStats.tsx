@@ -45,9 +45,9 @@ const TodayStats = () => {
   }, [getPlanForDate, today]);
 
   return (
-    <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm w-full max-w-md mx-auto mt-4 text-center">
-      <h3 className="text-lg font-semibold mb-2">Статистика за сегодня</h3>
-      <p className="text-xl">
+    <div className="p-3 rounded-lg border bg-card text-card-foreground shadow-sm text-center container-common">
+      <h3 className="text-2xl font-semibold mb-2">Трекер сессий</h3>
+      <p className="text-lg">
         Сыграно сегодня: <b>{formatDuration(totalPlayedToday)}</b> / План: <b>{dailyPlan} ч</b>
       </p>
     </div>

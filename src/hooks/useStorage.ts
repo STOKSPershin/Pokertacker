@@ -13,6 +13,8 @@ const defaultSettings: Settings = {
   allowManualEditing: false,
   showLiveClock: true,
   showTodayStats: true,
+  detachedWindowSize: 'large',
+  showTheoryColumns: true, // По умолчанию показывать столбцы теории
   goals: { hours: 0, hands: 0, sessions: 0 },
   listViewOptions: {
     showMonth: true,

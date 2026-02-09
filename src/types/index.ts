@@ -24,6 +24,8 @@ export type Settings = {
   allowManualEditing: boolean;
   showLiveClock?: boolean; // Optional
   showTodayStats?: boolean; // Optional
+  detachedWindowSize: 'small' | 'large'; // New setting for detached window size
+  showTheoryColumns?: boolean; // Показывать столбцы теории в дашборде
   goals: {
     hours: number;
     hands: number;

@@ -33,108 +33,210 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import AddSessionForm from './AddSessionForm';
 
-const SessionDetails = ({ 
-  sessions, 
+const SessionDetails = ({
+  sessions,
   showHandsPlayed,
   allowManualEditing,
   updateSession,
-}: { 
-  sessions: Session[], 
-  showHandsPlayed: boolean,
-  allowManualEditing: boolean,
-  updateSession: (sessionId: string, updatedData: Partial<Session>) => void,
-}) => (
-  <div className="p-4 bg-muted/50">
-    <h4 className="font-semibold mb-2 text-sm text-muted-foreground">Детализация сессий</h4>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="h-10">Начало</TableHead>
-          <TableHead className="h-10">Конец</TableHead>
-          <TableHead className="h-10 text-right">Длительность</TableHead>
-          {showHandsPlayed && <TableHead className="h-10 text-right">Руки</TableHead>}
-          <TableHead className="h-10">Заметки</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sessions.map(session => {
-          const start = new Date(session.overallStartTime);
-          const end = new Date(session.overallEndTime);
-          const duration = Math.max(0, differenceInSeconds(end, start));
+}: {
+  sessions: Session[];
+  showHandsPlayed: boolean;
+  allowManualEditing: boolean;
+  updateSession: (sessionId: string, updatedData: Partial<Session>) => void;
+}) => {
+  const [timeInputs, setTimeInputs] = useState<Record<string, { play: string; select: string }>>({});
 
-          const handleTimeChange = (field: 'overallStartTime' | 'overallEndTime', value: string) => {
-            const originalDate = new Date(session[field]);
-            const [hours, minutes, seconds] = value.split(':').map(Number);
-            
-            if (!isNaN(hours) && !isNaN(minutes)) {
-              const newDate = new Date(originalDate);
-              newDate.setHours(hours, minutes, seconds || 0);
-              updateSession(session.id, { [field]: newDate.toISOString() });
-            }
-          };
+  const parseTime = (timeString: string): number => {
+    const parts = timeString.split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return 0;
+  };
 
-          return (
-            <TableRow key={session.id} className="hover:bg-muted/80">
-              <TableCell className="py-2">
-                {allowManualEditing ? (
-                  <Input
-                    type="time"
-                    step="1"
-                    className="h-8 w-28"
-                    defaultValue={format(start, 'HH:mm:ss')}
-                    onBlur={(e) => handleTimeChange('overallStartTime', e.target.value)}
-                  />
-                ) : (
-                  format(start, 'HH:mm:ss')
-                )}
-              </TableCell>
-              <TableCell className="py-2">
-                {allowManualEditing ? (
-                  <Input
-                    type="time"
-                    step="1"
-                    className="h-8 w-28"
-                    defaultValue={format(end, 'HH:mm:ss')}
-                    onBlur={(e) => handleTimeChange('overallEndTime', e.target.value)}
-                  />
-                ) : (
-                  format(end, 'HH:mm:ss')
-                )}
-              </TableCell>
-              <TableCell className="py-2 text-right tabular-nums">{formatSeconds(duration)}</TableCell>
-              {showHandsPlayed && (
+  const formatTimeInput = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  const handleTimeInputChange = (sessionId: string, type: 'play' | 'select', value: string, totalDuration: number) => {
+    const newTimeValue = parseTime(value);
+    let otherTimeValue: number;
+    let newPlayTime: number, newSelectTime: number;
+
+    if (type === 'play') {
+      newPlayTime = Math.min(newTimeValue, totalDuration);
+      otherTimeValue = totalDuration - newPlayTime;
+      newSelectTime = otherTimeValue;
+    } else {
+      newSelectTime = Math.min(newTimeValue, totalDuration);
+      otherTimeValue = totalDuration - newSelectTime;
+      newPlayTime = otherTimeValue;
+    }
+
+    setTimeInputs(prev => ({
+      ...prev,
+      [sessionId]: {
+        play: formatTimeInput(newPlayTime),
+        select: formatTimeInput(newSelectTime),
+      },
+    }));
+  };
+
+  const handleTimeInputBlur = (session: Session) => {
+    const inputTimes = timeInputs[session.id];
+    if (!inputTimes) return;
+
+    const playSeconds = parseTime(inputTimes.play);
+    const selectSeconds = parseTime(inputTimes.select);
+
+    const newPeriods = [
+      {
+        startTime: session.overallStartTime,
+        endTime: new Date(new Date(session.overallStartTime).getTime() + playSeconds * 1000).toISOString(),
+        type: 'play' as const,
+      },
+      {
+        startTime: new Date(new Date(session.overallStartTime).getTime() + playSeconds * 1000).toISOString(),
+        endTime: new Date(new Date(session.overallStartTime).getTime() + (playSeconds + selectSeconds) * 1000).toISOString(),
+        type: 'select' as const,
+      },
+    ];
+
+    updateSession(session.id, { periods: newPeriods });
+  };
+
+  return (
+    <div className="p-4 bg-muted/50">
+      <h4 className="font-semibold mb-2 text-sm text-muted-foreground">Детализация сессий</h4>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="h-10">Начало</TableHead>
+            <TableHead className="h-10">Конец</TableHead>
+            <TableHead className="h-10 text-right">Длительность</TableHead>
+            <TableHead className="h-10 text-right">Время игры</TableHead>
+            <TableHead className="h-10 text-right">Время селекта</TableHead>
+            {showHandsPlayed && <TableHead className="h-10 text-right">Руки</TableHead>}
+            <TableHead className="h-10">Заметки</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sessions.map(session => {
+            const start = new Date(session.overallStartTime);
+            const end = new Date(session.overallEndTime);
+            const duration = Math.max(0, differenceInSeconds(end, start));
+
+            const playDuration = session.periods?.filter(p => p.type === 'play').reduce((sum, p) => sum + differenceInSeconds(new Date(p.endTime), new Date(p.startTime)), 0) || 0;
+            const selectDuration = session.periods?.filter(p => p.type === 'select').reduce((sum, p) => sum + differenceInSeconds(new Date(p.endTime), new Date(p.startTime)), 0) || 0;
+
+            const handleTimeChange = (field: 'overallStartTime' | 'overallEndTime', value: string) => {
+              const originalDate = new Date(session[field]);
+              const [hours, minutes, seconds] = value.split(':').map(Number);
+              
+              if (!isNaN(hours) && !isNaN(minutes)) {
+                const newDate = new Date(originalDate);
+                newDate.setHours(hours, minutes, seconds || 0);
+                updateSession(session.id, { [field]: newDate.toISOString() });
+              }
+            };
+
+            return (
+              <TableRow key={session.id} className="hover:bg-muted/80">
+                <TableCell className="py-2">
+                  {allowManualEditing ? (
+                    <Input
+                      type="time"
+                      step="1"
+                      className="h-8 w-28"
+                      defaultValue={format(start, 'HH:mm:ss')}
+                      onBlur={(e) => handleTimeChange('overallStartTime', e.target.value)}
+                    />
+                  ) : (
+                    format(start, 'HH:mm:ss')
+                  )}
+                </TableCell>
+                <TableCell className="py-2">
+                  {allowManualEditing ? (
+                    <Input
+                      type="time"
+                      step="1"
+                      className="h-8 w-28"
+                      defaultValue={format(end, 'HH:mm:ss')}
+                      onBlur={(e) => handleTimeChange('overallEndTime', e.target.value)}
+                    />
+                  ) : (
+                    format(end, 'HH:mm:ss')
+                  )}
+                </TableCell>
+                <TableCell className="py-2 text-right tabular-nums">{formatSeconds(duration)}</TableCell>
                 <TableCell className="py-2 text-right tabular-nums">
                   {allowManualEditing ? (
                     <Input
-                      type="number"
-                      className="h-8 w-24 text-right ml-auto"
-                      defaultValue={session.handsPlayed}
-                      onBlur={(e) => updateSession(session.id, { handsPlayed: Number(e.target.value) || 0 })}
+                      type="time"
+                      step="1"
+                      className="h-8 w-28"
+                      value={timeInputs[session.id]?.play ?? formatTimeInput(playDuration)}
+                      onChange={(e) => handleTimeInputChange(session.id, 'play', e.target.value, duration)}
+                      onBlur={() => handleTimeInputBlur(session)}
                     />
                   ) : (
-                    session.handsPlayed
+                    formatSeconds(playDuration)
                   )}
                 </TableCell>
-              )}
-              <TableCell className="py-2 text-sm text-muted-foreground">
-                {allowManualEditing ? (
-                  <Input
-                    type="text"
-                    className="h-8"
-                    defaultValue={session.notes || ''}
-                    onBlur={(e) => updateSession(session.id, { notes: e.target.value })}
-                  />
-                ) : (
-                  session.notes || '–'
+                <TableCell className="py-2 text-right tabular-nums">
+                  {allowManualEditing ? (
+                    <Input
+                      type="time"
+                      step="1"
+                      className="h-8 w-28"
+                      value={timeInputs[session.id]?.select ?? formatTimeInput(selectDuration)}
+                      onChange={(e) => handleTimeInputChange(session.id, 'select', e.target.value, duration)}
+                      onBlur={() => handleTimeInputBlur(session)}
+                    />
+                  ) : (
+                    formatSeconds(selectDuration)
+                  )}
+                </TableCell>
+                {showHandsPlayed && (
+                  <TableCell className="py-2 text-right tabular-nums">
+                    {allowManualEditing ? (
+                      <Input
+                        type="number"
+                        className="h-8 w-24 text-right ml-auto"
+                        defaultValue={session.handsPlayed}
+                        onBlur={(e) => updateSession(session.id, { handsPlayed: Number(e.target.value) || 0 })}
+                      />
+                    ) : (
+                      session.handsPlayed
+                    )}
+                  </TableCell>
                 )}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  </div>
-);
+                <TableCell className="py-2 text-sm text-muted-foreground">
+                  {allowManualEditing ? (
+                    <Input
+                      type="text"
+                      className="h-8"
+                      defaultValue={session.notes || ''}
+                      onBlur={(e) => updateSession(session.id, { notes: e.target.value })}
+                    />
+                  ) : (
+                    session.notes || '–'
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+};
 
 const ListView = () => {
   const { sessions, settings, updateSession, getPlanForDate, isOffDay } = useStorage();
